@@ -21,7 +21,7 @@ sub plugin_info {
         icon         => "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI0LTA2LTA1VDE3OjI1OjQ2KzAwOjAwDhuNnAAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNC0wNi0wNVQxNzoyNTo0NiswMDowMH9GNSAAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjQtMDYtMDVUMTc6MjU6NDYrMDA6MDAoUxT/AAAAB3RFWHRsYWJlbABA69qK2wAAAaNJREFUOI3t0j9I1HEYx/HX93d1gRxJUwhFSC7q0lDhElw0NBQ2RRj9gYYjaBCCCMS8OzujJRok+jO0REtNSeBSENSSEEVlEYFQDkZkVKBlevdtUCrvTB0d+mxfnuf95nkevvzPiktYtHrGNokTgmZMII1EcNNLV9xWXp5wv5QWFwTtKjr1uosIuqyX1o86w/ZVS1ctKGzVj12iNr0+KtiuolXinei96IjgoWY5XP4bTWpkPXbiOA7jm7w7uCTlA/oETxVNqbgu0VGN1wqDTjxQMISzgr1mHJQ3iCm8mVt/BJuWFpIV3ZOzWpATPVHyFkG0BcNz5BpMVsPzb1iQQb2KUQ0asRavQLcmQb3oNYha8GzxCcdNI0qk/DSOsmAdSNmDH4IvCtI4iqvVwtS815CyrA7RZyUDstI4JmurYBKDOCk6gFuKbixwsqoUnVYwKq8O5G2Q1/S73q1Rl4Z/4bUfe3ad+6JPMg45ZaKmp8duM547Z2xp4exUdSgJ2kUDoheYEWzGDsEjX5130fflCf9MmxG1iTZKlEUjxjx2zfSi3IrOL78DdhjScQmuAAAAAElFTkSuQmCC",
         parameters   => [
             {type => "bool", desc => "Prefer filename over galleryinfo.txt for title", default_value => "1"},
-            {type => "bool", desc => "Prefer title over tags for artist, group, and parody", default_value => "1"},
+            {type => "bool", desc => "Parse title for artist, group, and parody", default_value => "1"},
         ]
     );
 }
@@ -30,7 +30,7 @@ sub get_tags {
     shift;
     my $lrr_info = shift;
     my $archive_path = $lrr_info->{file_path};
-    my ($prefer_filename, $prefer_title) = @_;
+    my ($prefer_filename, $parse_title) = @_;
 
     my $logger = get_logger("HatH galleryinfo","plugins");
     $logger->info("Parsing galleryinfo.txt for " . $lrr_info->{archive_title});
@@ -55,10 +55,7 @@ sub get_tags {
             #     my $download_time_ts = to_unix_ts($1);
             #     push @new_tags, "date_downloaded:$download_time_ts";
             } elsif ($line =~ /Tags:\s+(.+)/) {
-                foreach my $tag (split /, /, $1) {
-                    if ($prefer_title && ($tag =~ /^artist/ || $tag =~ /^group/ || $tag =~ /^parody/)) { next; }
-                    push @new_tags, $tag;
-                }
+                push @new_tags, $1;
                 last;
             }
         }
@@ -88,10 +85,10 @@ sub get_tags {
     if (defined $9) { push @new_tags, "eh_gid:$9"; }
     if (defined $2) { push @new_tags, "convention:$2"; }
 
-    if ($prefer_title) {
+    if ($parse_title) {
         if (defined $7) {
             foreach my $parody (split /\s*;\s*/, $7) {
-                push @new_tags, "parody:$parody";
+                push @new_tags, "parody_original:$parody";
             }
         }
         if (defined $4) {
@@ -100,15 +97,12 @@ sub get_tags {
             my @author_char = split //, $author_str;
 
             my $name = "";
-            my @artists = ();
-            my @groups = ();
-
             my $push_author = sub {
                 my $is_artist = shift;
                 if ($name eq "") { return; }
                 $name = strip($name);
-                if ($is_artist) { push @artists, $name; }
-                else { push @groups, $name; }
+                if ($is_artist) { push @new_tags, "artist_original:$name"; }
+                else { push @new_tags, "group_original:$name"; }
                 $name = "";
             };
 
@@ -122,13 +116,6 @@ sub get_tags {
                 }
             }
             $push_author->(1);
-
-            while (my $artist = shift @artists) {
-                push @new_tags, "artist:$artist";
-            }
-            while (my $group = shift @groups) {
-                push @new_tags, "group:$group";
-            }
         }
     }
 
