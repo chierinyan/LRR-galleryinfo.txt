@@ -36,6 +36,7 @@ sub get_tags {
     $logger->info("Parsing galleryinfo.txt for " . $lrr_info->{archive_title});
 
     my $full_title;
+    my $summary;
     my @new_tags = ();
 
     my $galleryinfo_path;
@@ -56,9 +57,16 @@ sub get_tags {
             #     push @new_tags, "date_downloaded:$download_time_ts";
             } elsif ($line =~ /Tags:\s+(.+)/) {
                 push @new_tags, $1;
-                last;
+            } elsif ($line eq "Uploader's Comments:") {
+                $summary = "Uploader's Comments:\n";
+                while (my $comments = <$fh>) {
+                    $summary .= $comments;
+                }
+            } else {
+                $summary = $line; # get the last line when no comment exists
             }
         }
+        $summary =~ s/\n+$//g;
     }
 
     COMMIT:
@@ -121,7 +129,7 @@ sub get_tags {
 
     my $tags_str = join(", ", @new_tags);
     $logger->info("New Title: $title, New Tags: $tags_str");
-    return (tags => $tags_str, title => $title);
+    return (tags => $tags_str, title => $title, summary => $summary);
 }
 
 sub to_unix_ts {
